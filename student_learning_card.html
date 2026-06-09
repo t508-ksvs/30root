@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>字根互動學習任務</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .card-flip { transition: transform 0.6s; transform-style: preserve-3d; }
+        .card-flip.flipped { transform: rotateY(180deg); }
+        .card-front, .card-back { backface-visibility: hidden; position: absolute; top: 0; left: 0; height: 100%; width: 100%; }
+        .card-back { transform: rotateY(180deg); }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans flex items-center justify-center p-4">
+    <div id="app" class="w-full max-w-lg bg-white rounded-xl shadow-xl overflow-hidden relative">
+        <!-- 頂部資訊列 -->
+        <div class="bg-blue-600 p-4 text-white flex justify-between items-center">
+            <h1 class="font-bold"><i class="fa-solid fa-book-open mr-2"></i>字根字首挑戰</h1>
+            <span id="userEmailDisplay" class="text-sm opacity-80">未登入</span>
+        </div>
+        
+        <div class="p-6">
+            <!-- Screen 1: 登入 -->
+            <div id="screenLogin" class="block">
+                <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">歡迎進入學習模組</h2>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">請輸入您的學校 Email (以記錄成績)：</label>
+                    <input type="email" id="inputEmail" class="w-full p-3 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="example@school.edu.tw">
+                </div>
+                <button onclick="startLearning()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded shadow">開始學習任務</button>
+            </div>
+
+            <!-- Screen 2: 學習卡片 -->
+            <div id="screenLearn" class="hidden">
+                <div class="flex justify-between text-sm text-gray-500 mb-2">
+                    <span>單字記憶卡</span>
+                    <span id="learnProgress">1 / 10</span>
+                </div>
+                <div class="relative w-full h-64 mb-6 perspective" onclick="flipCard()">
+                    <div id="flashcard" class="card-flip w-full h-full relative cursor-pointer">
+                        <div class="card-front bg-blue-50 border-2 border-blue-200 rounded-xl flex flex-col justify-center items-center p-4">
+                            <span class="text-sm font-bold text-blue-500 mb-2" id="cardPos"></span>
+                            <h3 class="text-4xl font-bold text-gray-800 text-center" id="cardWord"></h3>
+                            <p class="text-gray-500 mt-4 text-sm"><i class="fa-solid fa-hand-pointer mr-1"></i>點擊翻面</p>
+                        </div>
+                        <div class="card-back bg-green-50 border-2 border-green-200 rounded-xl flex flex-col justify-center items-center p-6 text-center overflow-y-auto">
+                            <h3 class="text-2xl font-bold text-green-700 mb-2" id="cardMeaning"></h3>
+                            <p class="text-sm text-gray-700 font-mono bg-white p-2 rounded mb-2 border border-gray-200 w-full" id="cardEty"></p>
+                            <p class="text-xs text-gray-600 italic" id="cardNote"></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex space-x-4">
+                    <button onclick="prevCard()" class="flex-1 bg-gray-200 text-gray-800 font-bold py-2 rounded hover:bg-gray-300"><i class="fa-solid fa-arrow-left mr-1"></i>上一個</button>
+                    <button onclick="nextCard()" id="btnNextCard" class="flex-1 bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700">下一個<i class="fa-solid fa-arrow-right ml-1"></i></button>
+                </div>
+            </div>
+
+            <!-- Screen 3: 測驗 -->
+            <div id="screenQuiz" class="hidden">
+                <div class="flex justify-between text-sm text-gray-500 mb-4">
+                    <span>隨堂測驗</span>
+                    <span id="quizProgress">1 / 5</span>
+                </div>
+                <h3 class="text-xl font-bold text-gray-800 mb-4" id="quizQuestion"></h3>
+                <div id="quizOptions" class="space-y-3 mb-6"></div>
+            </div>
+
+            <!-- Screen 4: 結算 -->
+            <div id="screenResult" class="hidden text-center">
+                <div class="text-6xl text-green-500 mb-4"><i class="fa-solid fa-medal"></i></div>
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">任務完成！</h2>
+                <p class="text-gray-600 mb-6">您的測驗得分：<span id="finalScoreDisplay" class="text-3xl font-bold text-blue-600 mx-2">0</span>分</p>
+                <div id="loadingBox" class="text-yellow-600 mb-4"><i class="fa-solid fa-spinner fa-spin mr-2"></i>成績傳送中，請稍候...</div>
+                <div id="successBox" class="hidden text-green-600 font-bold p-3 bg-green-50 rounded border border-green-200"><i class="fa-solid fa-check-circle mr-2"></i>成績已成功送出！您可以關閉此視窗。</div>
+                <div id="errorBox" class="hidden text-red-600 font-bold p-3 bg-red-50 rounded border border-red-200"><i class="fa-solid fa-triangle-exclamation mr-2"></i>傳送失敗，請截圖此畫面回報老師。</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const vocabData = [
+{
+"word": "dismiss",
+"pos": "v.",
+"meaning": "解僱，解散",
+"etymology": "dis~(離開) + miss/mit(送)",
+"note": "原意為「送走」，延伸為讓人離開職位或場合。"
+},
+{
+"word": "inaudible",
+"pos": "adj.",
+"meaning": "聽不見的",
+"etymology": "in~(不) + aud(聽) + ible(可…的)",
+"note": ""
+},
+{
+"word": "supervise",
+"pos": "v.",
+"meaning": "監督，指導",
+"etymology": "super~(在上) + vis(看)",
+"note": "從上面看 → 引申為監督。"
+},
+{
+"word": "introspect",
+"pos": "v.",
+"meaning": "內省，反思",
+"etymology": "intro~(向內) + spect(看)",
+"note": ""
+},
+{
+"word": "intermediate",
+"pos": "adj.",
+"meaning": "中等的，中級的",
+"etymology": "inter~(在中間) + medi(中間) + ate",
+"note": ""
+},
+{
+"word": "predict",
+"pos": "v.",
+"meaning": "預測，預言",
+"etymology": "pre~(在前) + dict(說)",
+"note": "事先說 → 預測。"
+},
+{
+"word": "propose",
+"pos": "v.",
+"meaning": "提出，建議",
+"etymology": "pro~(向前) + pose(放)",
+"note": "把想法放出來 → 提出建議。"
+},
+{
+"word": "persist",
+"pos": "v.",
+"meaning": "堅持，持續存在",
+"etymology": "per~(完全) + sist(站立)",
+"note": "一直站著不動 → 堅持。"
+},
+{
+"word": "transport",
+"pos": "v./n.",
+"meaning": "運輸，傳送",
+"etymology": "trans~(跨越) + port(搬運)",
+"note": ""
+},
+{
+"word": "reject",
+"pos": "v.",
+"meaning": "拒絕，退回",
+"etymology": "re~(回) + ject(丟)",
+"note": "丟回去 → 拒絕。"
+},
+{
+"word": "sustainability",
+"pos": "n.",
+"meaning": "永續性，持續性",
+"etymology": "sus~(在下) + tain(持) + ability",
+"note": "支撐住 → 能持續存在。"
+},
+{
+"word": "antigen",
+"pos": "n.",
+"meaning": "抗原",
+"etymology": "anti~(對抗) + gen(產生)",
+"note": "引發對抗反應的物質。"
+},
+{
+"word": "conference",
+"pos": "n.",
+"meaning": "會議，討論會",
+"etymology": "con~(共同) + fer(帶來) + ence",
+"note": "把想法帶在一起 → 討論會。"
+},
+{
+"word": "circumscribe",
+"pos": "v.",
+"meaning": "限制，劃界",
+"etymology": "circum~(圍繞) + scribe(寫)",
+"note": "畫一圈界線 → 限制範圍。"
+},
+{
+"word": "autobiography",
+"pos": "n.",
+"meaning": "自傳",
+"etymology": "auto~(自己) + bio(生命) + graph(寫)",
+"note": ""
+},
+{
+"word": "manufacture",
+"pos": "v./n.",
+"meaning": "製造，生產",
+"etymology": "manu(手) + fact(做) + ure",
+"note": "用手做 → 製造。"
+},
+{
+"word": "destruction",
+"pos": "n.",
+"meaning": "破壞，毀滅",
+"etymology": "de~(向下) + struct(建造) + ion",
+"note": "拆掉結構 → 毀滅。"
+},
+{
+"word": "psychologist",
+"pos": "n.",
+"meaning": "心理學家",
+"etymology": "psych(心靈) + log(研究) + ist(人)",
+"note": ""
+},
+{
+"word": "irreversible",
+"pos": "adj.",
+"meaning": "無法改變的",
+"etymology": "ir~(不) + re~(回) + vers(轉) + ible",
+"note": "不能轉回 → 無法逆轉。"
+},
+{
+"word": "evacuate",
+"pos": "v.",
+"meaning": "撤離，疏散",
+"etymology": "e/ex~(出) + vac(空)",
+"note": "把人清空出去。"
+},
+{
+"word": "contravene",
+"pos": "v.",
+"meaning": "違反，牴觸",
+"etymology": "contra~(反對) + vene(來)",
+"note": "走向相反方向 → 違反。"
+},
+{
+"word": "selective",
+"pos": "adj.",
+"meaning": "有選擇性的",
+"etymology": "select(選擇) + ive",
+"note": "來自 select = se(分開) + lect(選)。"
+},
+{
+"word": "abduct",
+"pos": "v.",
+"meaning": "綁架，誘拐",
+"etymology": "ab~(離開) + duct(帶)",
+"note": "帶走 → 綁架。"
+},
+{
+"word": "attractive",
+"pos": "adj.",
+"meaning": "有吸引力的",
+"etymology": "at~(向) + tract(拉) + ive",
+"note": "把人拉過來 → 吸引。"
+},
+{
+"word": "necessary",
+"pos": "adj.",
+"meaning": "必要的，必需的",
+"etymology": "ne~(不) + cess(走) + ary",
+"note": "不能不走的路 → 必須的。"
+},
+{
+"word": "diagnose",
+"pos": "v.",
+"meaning": "診斷",
+"etymology": "dia~(穿過) + gnos(知道)",
+"note": "透過症狀知道 → 診斷。"
+},
+{
+"word": "spiritual",
+"pos": "adj.",
+"meaning": "心靈的，精神的",
+"etymology": "spir(呼吸/靈魂) + it + ual",
+"note": ""
+},
+{
+"word": "observe",
+"pos": "v.",
+"meaning": "觀察，遵守",
+"etymology": "ob~(朝向) + serve(看/保持)",
+"note": "仔細看 → 觀察；延伸為遵守規則。"
+},
+{
+"word": "benefit",
+"pos": "n./v.",
+"meaning": "受益，好處",
+"etymology": "bene(好) + fit(做)",
+"note": "做好事 → 帶來好處。"
+},
+{
+"word": "intensify",
+"pos": "v.",
+"meaning": "加強，使變激烈",
+"etymology": "in~(使) + tense(緊) + ify",
+"note": "讓變得更緊 → 更強烈。"
+}
+];
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbz1GLJ6yQW1SiVpSsCWAwguKb0B8XoZ4dZTIYRy_RNqRjHwOJdlCSnOGdJV9xUwPWws/exec";
+        let userEmail = "";
+        let currentCard = 0;
+        let quizQuestions = [];
+        let currentQuiz = 0;
+        let score = 0;
+
+        function startLearning() {
+            const email = document.getElementById('inputEmail').value.trim();
+            if(!email || !email.includes('@')) return alert('請輸入有效的 Email！');
+            userEmail = email;
+            document.getElementById('userEmailDisplay').innerText = userEmail;
+            
+            document.getElementById('screenLogin').classList.add('hidden');
+            document.getElementById('screenLearn').classList.remove('hidden');
+            renderCard();
+        }
+
+        function flipCard() {
+            document.getElementById('flashcard').classList.toggle('flipped');
+        }
+
+        function renderCard() {
+            document.getElementById('flashcard').classList.remove('flipped');
+            const word = vocabData[currentCard];
+            document.getElementById('learnProgress').innerText = `${currentCard + 1} / ${vocabData.length}`;
+            document.getElementById('cardWord').innerText = word.word;
+            document.getElementById('cardPos').innerText = word.pos;
+            document.getElementById('cardMeaning').innerText = word.meaning;
+            document.getElementById('cardEty').innerText = word.etymology;
+            document.getElementById('cardNote').innerText = word.note || '';
+            
+            const btnNext = document.getElementById('btnNextCard');
+            if (currentCard === vocabData.length - 1) {
+                btnNext.innerHTML = '進入測驗 <i class="fa-solid fa-pen-to-square ml-1"></i>';
+                btnNext.classList.replace('bg-blue-600', 'bg-orange-500');
+                btnNext.classList.replace('hover:bg-blue-700', 'hover:bg-orange-600');
+            } else {
+                btnNext.innerHTML = '下一個 <i class="fa-solid fa-arrow-right ml-1"></i>';
+                btnNext.classList.replace('bg-orange-500', 'bg-blue-600');
+                btnNext.classList.replace('hover:bg-orange-600', 'hover:bg-blue-700');
+            }
+        }
+
+        function nextCard() {
+            if (currentCard < vocabData.length - 1) {
+                currentCard++;
+                renderCard();
+            } else {
+                initQuiz();
+            }
+        }
+        function prevCard() {
+            if (currentCard > 0) { currentCard--; renderCard(); }
+        }
+
+        function initQuiz() {
+            document.getElementById('screenLearn').classList.add('hidden');
+            document.getElementById('screenQuiz').classList.remove('hidden');
+            // 隨機選取5題進行測驗
+            let shuffled = [...vocabData].sort(() => 0.5 - Math.random());
+            quizQuestions = shuffled.slice(0, Math.min(5, vocabData.length));
+            renderQuiz();
+        }
+
+        function renderQuiz() {
+            if (currentQuiz >= quizQuestions.length) return endQuiz();
+            const q = quizQuestions[currentQuiz];
+            document.getElementById('quizProgress').innerText = `${currentQuiz + 1} / ${quizQuestions.length}`;
+            document.getElementById('quizQuestion').innerText = `請問「${q.meaning}」的單字是？`;
+            
+            // 產生選項
+            let options = [q.word];
+            let pool = vocabData.map(v => v.word).filter(w => w !== q.word);
+            pool.sort(() => 0.5 - Math.random());
+            options.push(...pool.slice(0, 3)); // 加入3個混淆選項
+            options.sort(() => 0.5 - Math.random());
+
+            const container = document.getElementById('quizOptions');
+            container.innerHTML = '';
+            options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = "w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:bg-blue-50 hover:border-blue-300 font-bold text-gray-700 transition";
+                btn.innerText = opt;
+                btn.onclick = () => handleAnswer(opt === q.word);
+                container.appendChild(btn);
+            });
+        }
+
+        function handleAnswer(isCorrect) {
+            if (isCorrect) score += (100 / quizQuestions.length);
+            currentQuiz++;
+            renderQuiz();
+        }
+
+        function endQuiz() {
+            document.getElementById('screenQuiz').classList.add('hidden');
+            document.getElementById('screenResult').classList.remove('hidden');
+            const finalScore = Math.round(score);
+            document.getElementById('finalScoreDisplay').innerText = finalScore;
+            
+            // 傳送成績至 GAS
+            fetch(GAS_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: userEmail, score: finalScore })
+            }).then(() => {
+                document.getElementById('loadingBox').classList.add('hidden');
+                document.getElementById('successBox').classList.remove('hidden');
+            }).catch(e => {
+                document.getElementById('loadingBox').classList.add('hidden');
+                document.getElementById('errorBox').classList.remove('hidden');
+            });
+        }
+    </script>
+</body>
+</html>
